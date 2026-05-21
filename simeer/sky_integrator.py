@@ -57,7 +57,12 @@ def integrate_sample(
     _omega_b_disc: np.ndarray | None = None,
     _margin_deg: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Compute one Stokes-I TOD sample for all requested frequencies.
+    """Compute one **Sky TOD** sample (Stokes I) for all requested frequencies.
+
+    The returned value is the beam-weighted sky temperature at this
+    single pointing -- no gain, no noise. See :func:`integrate_tod` for
+    the multi-pointing driver, and :meth:`simeer.SimeerTODSim.generate_TOD`
+    for the Full TOD that injects gain and noise on top.
 
     Parameters
     ----------
@@ -264,7 +269,16 @@ def integrate_tod(
     batch_size: int | None = None,
     progress: bool = False,
 ) -> np.ndarray:
-    """Vectorised driver of :func:`integrate_sample` over a TOD.
+    """Generate the **Sky TOD** for a full list of pointings.
+
+    This is the noiseless, gain-free beam-weighted sky signal -- it does
+    NOT include receiver gain, 1/f gain fluctuations, system-temperature
+    offsets, or white noise. For a Full TOD with those instrumental
+    effects, use :class:`simeer.SimeerTODSim.generate_TOD` (which calls
+    this function internally as its sky-TOD step).
+
+    Implemented as a vectorised driver over :func:`integrate_sample`,
+    parallelised across time samples via :mod:`simeer._parallel`.
 
     Parameters
     ----------

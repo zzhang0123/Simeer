@@ -95,69 +95,178 @@ the notebooks, `pytest` for tests.
 
 ## Quick start
 
-### Using the low-level integrator (no limTOD)
+This produces a **Sky TOD** -- the noiseless, beam-weighted sky signal
+for each pointing. No external dependencies beyond the ones in
+`pyproject.toml`; gain and noise injection are out of scope (see
+*Production path* below).
 
 ```python
 import numpy as np
+import healpy as hp
 from simeer import MeerKLASSBeam, integrate_tod
 
-beam = MeerKLASSBeam("MeerKAT_U_band_primary_beam_aa_highres.npz")
+# 1. Load the holographic beam (array-average, HH+VV by default).
+beam = MeerKLASSBeam("MeerKAT_U_band_primary_beam.npz")
 
-# Build the sky model on the beam's frequency grid.
-freq_MHz = beam.freq_MHz[::10]      # every 10th channel for this demo
-sky = my_sky_function(freq_MHz)     # shape (n_freq, n_pix_sky)
+# 2. Pick the frequency channels you want to simulate (must match the
+#    beam's grid -- use beam.freq_MHz directly or a subset of it).
+freq_MHz = beam.freq_MHz[::32]                        # 32 channels across the band
 
-# Telescope pointing.
-lst_deg = ...   # shape (n_time,)
-az_deg  = ...   # shape (n_time,)
-el_deg  = ...   # shape (n_time,)
+# 3. Build (or load) a sky model on the same frequency grid. Here we use
+#    a uniform 8 K sky as a placeholder; substitute your own GSM/GDSM/
+#    pyradiosky cube of shape (n_freq, n_pix_sky).
+nside_sky = 256
+sky_maps = np.full((len(freq_MHz), hp.nside2npix(nside_sky)), 8.0, dtype=np.float64)
 
-tod = integrate_tod(
+# 4. Specify the pointing time series. (LST is in degrees; convert from
+#    UTC + site coordinates yourself, or use whatever scheduler you have.)
+ntime = 4000
+lst_deg = np.linspace(0.0, 30.0, ntime)
+az_deg  = 180.0 + 5.0 * np.sin(np.linspace(0, 4 * np.pi, ntime))
+el_deg  = np.full(ntime, 41.5)
+
+# 5. Generate the Sky TOD.
+sky_tod = integrate_tod(
     lst_deg_list=lst_deg,
     az_deg_list=az_deg,
     el_deg_list=el_deg,
-    lat_deg=-30.7130,
+    lat_deg=-30.7130,                # MeerKAT
     beam=beam,
-    sky_maps=sky,
+    sky_maps=sky_maps,
     freq_MHz=freq_MHz,
-    disc_radius_deg=8.0,
+    disc_radius_deg=8.0,             # ~ +/-6 deg beam + safety margin
     polarization="HH",
-    n_jobs=-1,            # joblib: use all cores
+    n_jobs=-1,                       # joblib: use all cores
     progress=True,
 )
-# tod.shape == (n_freq, n_time)
+# sky_tod.shape == (n_freq, n_time)  -- antenna temperature in K
 ```
 
-### Drop-in replacement for `limTOD.TODSim`
+For the **Full TOD** (Sky TOD multiplied by receiver gain and with 1/f
+and white noise injected), see the *Production path* section below and
+`SimeerTODSim.generate_TOD` in `simeer/simulator.py`.
+
+## Production path: Sky TOD vs Full TOD
+
+### What is the Sky TOD?
+
+The **Sky TOD** is the noiseless, gain-free sky signal that an ideal
+telescope would measure at each pointing -- the beam-weighted integral
+of the sky brightness temperature over the antenna's primary beam:
+
+```
+                 1
+  T_sky(nu, t) = ----- * integral over sky of  B(l, m, nu) * T(l, m, nu) dOmega
+                Omega_b(nu)
+```
+
+where:
+
+- `B(l, m, nu)` is the primary beam *power* pattern at frequency `nu`,
+  defined in direction-cosine coordinates `(l, m)` centred on the
+  pointing;
+- `Omega_b(nu) = integral B dOmega` is the beam solid angle, so the
+  result is in the same temperature units as the input sky;
+- `T(l, m, nu)` is the sky brightness temperature evaluated at the disc
+  pixels (Simeer projects HEALPix sky pixels into the antenna-local
+  `(l, m)` frame on the fly).
+
+The Sky TOD is the "pure" signal that downstream calibration and
+map-making algorithms ultimately try to recover from the measured TOD.
+Simeer **only** computes the Sky TOD; gain, 1/f noise, and white-noise
+injection live in `limTOD`.
+
+### What is the Full TOD?
+
+The **Full TOD** is the realistic instrument-modulated signal, the
+quantity an actual receiver writes to disk:
+
+```
+  TOD(nu, t) = G_bg(nu, t) * [1 + G_noise(nu, t)]
+               * [T_sky(nu, t) + T_sys_other(nu, t)]
+               * [1 + eta(t)]
+```
+
+with `G_bg` the background gain pattern, `G_noise` the multiplicative
+1/f gain fluctuation, `T_sys_other` other system-temperature components
+(CMB, ground spill, receiver), and `eta` additive white noise. The Full
+TOD assembly happens inside `limTOD.TODSim.generate_TOD`; Simeer plugs
+into it by replacing only the `T_sky(nu, t)` step.
+
+### Key APIs
+
+**Important: `integrate_tod` and `integrate_sample` both return the
+Sky TOD only -- they do NOT add gain, 1/f, or white noise. Despite the
+generic-sounding name, `integrate_tod` is a Sky-TOD generator.** The
+only entry point that returns the Full TOD is
+`SimeerTODSim.generate_TOD`.
+
+| You want                                       | Call                                      | Returns                                          | Requires `limTOD`? |
+| ---------------------------------------------- | ----------------------------------------- | ------------------------------------------------ | ------------------ |
+| **Sky TOD** for the whole pointing list        | `simeer.integrate_tod(...)`               | `ndarray (n_freq, n_time)` -- the Sky TOD        | No                 |
+| **Sky TOD** for a single pointing              | `simeer.integrate_sample(...)`            | `ndarray (n_freq,)` -- one Sky-TOD sample        | No                 |
+| **Sky TOD** via the `limTOD`-style class       | `SimeerTODSim.simulate_sky_TOD(...)`      | `ndarray (n_freq, n_time)` -- Sky TOD            | Yes                |
+| **Full TOD** (sky + gain + 1/f + white noise)  | `SimeerTODSim.generate_TOD(...)`          | `(overall_TOD, sky_TOD, gain_noise)` triple      | Yes                |
+
+`SimeerTODSim.generate_TOD` is inherited unchanged from
+`limTOD.TODSim.generate_TOD`; the only overridden step is the sky-TOD
+computation, which now goes through Simeer's `integrate_tod` instead of
+limTOD's spherical-harmonic rotation.
+
+In short:
+
+- If you only need Sky TOD (forward modelling, beam diagnostics, sky
+  validation), call `simeer.integrate_tod` directly and skip the
+  `limTOD` dependency.
+- If you need a Full TOD with realistic gain and noise behaviour, use
+  `SimeerTODSim.generate_TOD` -- the Sky TOD computed by Simeer is
+  threaded straight into limTOD's noise/gain pipeline.
+
+### Full TOD example
+
+Requires `limTOD` to be installed (`pip install -e ../limTOD`). This
+example produces the **Full TOD** -- the realistic instrument-modulated
+signal that an actual receiver would write to disk.
 
 ```python
-from limTOD.sky_model import GDSM_sky_model
-from limTOD.simulator import example_scan
+import numpy as np
 from simeer import MeerKLASSBeam, SimeerTODSim
 
-beam = MeerKLASSBeam("MeerKAT_U_band_primary_beam_aa_highres.npz")
+# Sky model and scan-pattern helpers come from limTOD.
+from limTOD.sky_model import GDSM_sky_model
+from limTOD.simulator import example_scan
+
+beam = MeerKLASSBeam("MeerKAT_U_band_primary_beam.npz")
 
 sim = SimeerTODSim(
     beam=beam,
-    sky_func=GDSM_sky_model,
+    sky_func=GDSM_sky_model,                # callable: sky_func(freq=..., nside=...)
     sky_nside=512,
     disc_radius_deg=8.0,
     polarization="HH",
+    ant_latitude_deg=-30.7130,              # MeerKAT
+    ant_longitude_deg=21.4430,
+    ant_height_m=1054.0,
     n_jobs=-1,
 )
 
-time_list, az_list = example_scan()
-tod, sky_tod, gain_noise = sim.generate_TOD(
-    freq_list=beam.freq_MHz[::10],
+time_list, az_list = example_scan()         # simple raster scan from limTOD
+overall_TOD, sky_TOD, gain_noise = sim.generate_TOD(
+    freq_list=beam.freq_MHz[::32],          # 32 channels across U-band
     time_list=time_list,
     azimuth_deg_list=az_list,
     elevation_deg=41.5,
+    start_time_utc="2019-04-23 20:41:56.397",
+    # Optional: gain_noise_params=[f0, fc, alpha], white_noise_var=..., etc.
 )
+# overall_TOD : Full TOD with gain + 1/f + white noise injected
+# sky_TOD     : the pure Sky TOD that integrate_tod would also return
+# gain_noise  : the 1/f gain-noise realisation that was injected
 ```
 
-Everything outside `simulate_sky_TOD` (gain noise, flicker noise,
-white-noise injection, TOD assembly) is inherited unchanged from
-`limTOD.TODSim`.
+The Sky-TOD step inside `generate_TOD` is Simeer's; everything else
+(LST generation, background gain, 1/f noise, white noise, TOD assembly)
+is inherited unchanged from `limTOD.TODSim`.
 
 ## Design choices
 
@@ -330,20 +439,3 @@ Manchester. Part of the MeerKLASS analysis toolchain; see also
 [`limTOD`](https://github.com/zzhang0123/limTOD) and
 [`TIBEC`](https://github.com/zzhang0123/TIBEC).
 
-## Citation
-
-If you use Simeer in your research, please cite as:
-
-```bibtex
-@software{zhang_simeer_2026,
-  author  = {Zhang, Zheng},
-  title   = {Simeer: optimal MeerKLASS TOD simulator with native (l, m) beam interpolation},
-  year    = {2026},
-  version = {0.1.0},
-  url     = {https://github.com/zzhang0123/Simeer},
-  license = {MIT}
-}
-```
-
-The CITATION.cff file in this repository provides the same metadata in
-machine-readable form for GitHub's "Cite this repository" button.

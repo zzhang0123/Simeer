@@ -5,20 +5,36 @@ Author:  Zheng Zhang <zheng.zhang@manchester.ac.uk> (University of Manchester)
 License: MIT (see LICENSE)
 Version: 0.1.0
 
+Sky TOD vs Full TOD
+-------------------
+
+Simeer computes the **Sky TOD**: the noiseless beam-weighted sky signal,
+``T_sky(nu, t) = (1/Omega_b(nu)) * integral B(l, m, nu) T(l, m, nu) dOmega``.
+It does NOT add gain, 1/f noise, or white noise; the **Full TOD**
+assembly (multiplying by gain and injecting noise) is delegated to
+:class:`limTOD.TODSim.generate_TOD`, which :class:`SimeerTODSim`
+inherits unchanged.
+
 Public API
 ----------
 
-High-level entry points:
+Sky-TOD generation (no limTOD dependency):
+
+*   :func:`simeer.sky_integrator.integrate_tod` -- Sky TOD for a list of
+    pointings; returns ``(n_freq, n_time)`` ndarray.
+*   :func:`simeer.sky_integrator.integrate_sample` -- Sky TOD for one
+    pointing; returns ``(n_freq,)`` ndarray.
+
+Full-TOD generation (requires limTOD installed):
+
+*   :class:`SimeerTODSim` -- drop-in replacement for
+    :class:`limTOD.TODSim` whose sky-TOD step uses Simeer's (l, m) disc
+    path. ``SimeerTODSim.generate_TOD(...)`` returns
+    ``(overall_TOD, sky_TOD, gain_noise)``.
+
+Building blocks (useful for custom pipelines / tests):
 
 *   :class:`MeerKLASSBeam` -- load and query the holographic beam.
-*   :class:`SimeerTODSim` -- drop-in replacement for
-    :class:`limTOD.TODSim` whose sky-TOD step uses the (l, m) disc path
-    instead of HEALPix spherical-harmonic rotation.
-
-Lower-level building blocks (useful for custom pipelines / tests):
-
-*   :func:`simeer.sky_integrator.integrate_sample`
-*   :func:`simeer.sky_integrator.integrate_tod`
 *   :func:`simeer.projection.direction_cosines`
 *   :func:`simeer.interpolation.precompute_bilinear_weights`
 *   :func:`simeer.disc.select_disc`
