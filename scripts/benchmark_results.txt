@@ -1,0 +1,62 @@
+Simeer benchmark
+============================================================
+
+[1] Serial throughput (median of 3 runs):
+   ntime  nside  nfreq    total_s    per_sample_ms
+      64    128      1      0.015             0.24
+      64    128      8      0.023             0.37
+     256    128      8      0.094             0.37
+     256    256      8      0.294             1.15
+
+[2a] Parallel scaling on ntime=4000, nside=128, nfreq=8 (small):
+    Pool-startup overhead (~500 ms) dominates here; expect ~1.3-1.4x at n_jobs=4.
+  n_jobs=   1: 1.456 s
+  n_jobs=   2: 1.357 s
+  n_jobs=   4: 1.047 s
+  n_jobs=  -1: 1.322 s
+  (host has 28 CPUs)
+
+[2b] Parallel scaling on ntime=20000, nside=256, nfreq=64 (realistic):
+    Auto-memmap kicks in (>100 KB top-level ndarrays), pool startup
+    is amortised over the longer run -> clean near-linear scaling.
+  n_jobs=   1: 92.929 s
+  n_jobs=   2: 49.662 s
+  n_jobs=   4: 26.662 s
+  n_jobs=  -1: 9.028 s
+  (host has 28 CPUs)
+
+[3] cProfile top-25 (ntime=128, nside=128, nfreq=8):
+         18745 function calls in 0.061 seconds
+
+   Ordered by: cumulative time
+   List reduced from 71 to 25 due to restriction <25>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.061    0.061 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/sky_integrator.py:251(integrate_tod)
+        1    0.000    0.000    0.061    0.061 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/_parallel.py:27(map_samples)
+        1    0.002    0.002    0.061    0.061 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/sky_integrator.py:197(_process_batch)
+      128    0.005    0.000    0.058    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/sky_integrator.py:42(integrate_sample)
+      128    0.021    0.000    0.021    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/interpolation.py:145(apply_bilinear)
+      128    0.001    0.000    0.011    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/projection.py:155(pixel_directions_to_az_el)
+      128    0.004    0.000    0.009    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/interpolation.py:58(precompute_bilinear_weights)
+      128    0.008    0.000    0.009    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/projection.py:77(equatorial_to_horizon)
+      770    0.000    0.000    0.005    0.000 /opt/homebrew/Caskroom/miniconda/base/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:51(_wrapfunc)
+      128    0.000    0.000    0.005    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/disc.py:39(select_disc)
+      257    0.000    0.000    0.003    0.000 /opt/homebrew/Caskroom/miniconda/base/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:1446(searchsorted)
+      257    0.003    0.000    0.003    0.000 {method 'searchsorted' of 'numpy.ndarray' objects}
+     2437    0.003    0.000    0.003    0.000 {built-in method numpy.asarray}
+      128    0.003    0.000    0.003    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/projection.py:110(direction_cosines)
+      128    0.000    0.000    0.002    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/projection.py:189(pointing_radec)
+      128    0.002    0.000    0.002    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/projection.py:30(horizon_to_equatorial)
+      128    0.001    0.000    0.002    0.000 /Users/zzhang/Workspace/RadioCosmology/Simeer/simeer/stokes.py:31(integrate_stokes_I)
+      513    0.000    0.000    0.002    0.000 /opt/homebrew/Caskroom/miniconda/base/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:2241(clip)
+      128    0.001    0.000    0.002    0.000 /opt/homebrew/Caskroom/miniconda/base/lib/python3.12/site-packages/healpy/pixelfunc.py:505(pix2ang)
+      128    0.000    0.000    0.002    0.000 /opt/homebrew/Caskroom/miniconda/base/lib/python3.12/site-packages/healpy/pixelfunc.py:439(ang2pix)
+      384    0.000    0.000    0.001    0.000 /opt/homebrew/Caskroom/miniconda/base/lib/python3.12/site-packages/healpy/pixelfunc.py:1299(check_nside)
+      641    0.000    0.000    0.001    0.000 /opt/homebrew/Caskroom/miniconda/base/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:89(_wrapreduction_any_all)
+     1154    0.001    0.000    0.001    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+      513    0.001    0.000    0.001    0.000 /opt/homebrew/Caskroom/miniconda/base/lib/python3.12/site-packages/numpy/_core/_methods.py:98(_clip)
+      385    0.000    0.000    0.001    0.000 {method 'clip' of 'numpy.ndarray' objects}
+
+
+

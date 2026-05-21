@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simeer"
+version = "0.1.0"
+authors = [
+    {name = "Zheng Zhang", email = "zheng.zhang@manchester.ac.uk"},
+]
+description = "Optimal MeerKLASS TOD simulator with native (l, m) beam interpolation"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+keywords = [
+    "time-ordered data",
+    "MeerKAT",
+    "MeerKLASS",
+    "single-dish",
+    "primary beam",
+    "intensity mapping",
+    "HEALPix",
+]
+dependencies = [
+    "numpy>=1.21",
+    "healpy>=1.15",
+    "joblib>=1.2",
+    "tqdm>=4.60",
+]
+
+[project.optional-dependencies]
+limtod = [
+    # limTOD provides the TODSim base class, gain/flicker/white-noise model,
+    # LST utilities, and the map-maker. Install separately (editable from the
+    # sibling worktree, or pinned via VCS) before enabling the SimeerTODSim
+    # subclass.
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+]
+notebooks = [
+    "jupyter>=1.0",
+    "matplotlib>=3.5",
+]
+
+[project.urls]
+"Source Code" = "https://github.com/zzhang0123/Simeer"
+"Sibling projects" = "https://github.com/zzhang0123/limTOD"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["simeer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast in-memory unit tests",
+    "integration: tests that exercise multiple modules together",
+    "slow: tests that load the real MeerKLASS beam file",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311"]
