@@ -3,6 +3,11 @@
 **Sim**ulator for **Mee**rKLASS **R**adio TOD with native (l, m) primary
 beam interpolation.
 
+- **Author**: Zheng Zhang &lt;zheng.zhang@manchester.ac.uk&gt; (University of Manchester)
+- **License**: MIT (see [LICENSE](LICENSE))
+- **Citation**: see [CITATION.cff](CITATION.cff)
+- **Version**: 0.1.0
+
 Simeer is an optimal replacement for `limTOD`'s `simulate_sky_TOD` step
 specialised for the MeerKLASS holographic primary beam. It avoids the
 HEALPix spherical-harmonic rotation path -- which would require
@@ -315,10 +320,30 @@ welcome.
 
 ## License
 
-MIT, matching the rest of the MeerKLASS toolchain.
+MIT, matching the rest of the MeerKLASS toolchain. See [LICENSE](LICENSE)
+for the full text.
 
-## Maintainers
+## Author
 
-Zheng Zhang (University of Manchester). Part of the MeerKLASS analysis
-toolchain; see also [`limTOD`](https://github.com/zzhang0123/limTOD)
-and [`TIBEC`](https://github.com/zzhang0123/TIBEC).
+**Zheng Zhang** &lt;zheng.zhang@manchester.ac.uk&gt; -- University of
+Manchester. Part of the MeerKLASS analysis toolchain; see also
+[`limTOD`](https://github.com/zzhang0123/limTOD) and
+[`TIBEC`](https://github.com/zzhang0123/TIBEC).
+
+## Citation
+
+If you use Simeer in your research, please cite as:
+
+```bibtex
+@software{zhang_simeer_2026,
+  author  = {Zhang, Zheng},
+  title   = {Simeer: optimal MeerKLASS TOD simulator with native (l, m) beam interpolation},
+  year    = {2026},
+  version = {0.1.0},
+  url     = {https://github.com/zzhang0123/Simeer},
+  license = {MIT}
+}
+```
+
+The CITATION.cff file in this repository provides the same metadata in
+machine-readable form for GitHub's "Cite this repository" button.

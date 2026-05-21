@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+title: "Simeer: optimal MeerKLASS TOD simulator"
+message: "If you use Simeer in your research, please cite as below."
+type: software
+version: 0.1.0
+date-released: 2026-05-21
+license: MIT
+url: "https://github.com/zzhang0123/Simeer"
+authors:
+  - family-names: Zhang
+    given-names: Zheng
+    email: zheng.zhang@manchester.ac.uk
+    affiliation: "University of Manchester"
+keywords:
+  - radio astronomy
+  - 21cm intensity mapping
+  - MeerKAT
+  - MeerKLASS
+  - single-dish
+  - primary beam
+  - time-ordered data
+  - HEALPix

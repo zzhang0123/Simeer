@@ -1,6 +1,10 @@
 """
 Simeer: optimal MeerKLASS TOD simulator with native (l, m) beam interpolation.
 
+Author:  Zheng Zhang <zheng.zhang@manchester.ac.uk> (University of Manchester)
+License: MIT (see LICENSE)
+Version: 0.1.0
+
 Public API
 ----------
 
@@ -40,6 +44,9 @@ __all__ = [
 ]
 
 __version__ = "0.1.0"
+__author__ = "Zheng Zhang"
+__email__ = "zheng.zhang@manchester.ac.uk"
+__license__ = "MIT"
 
 
 def __getattr__(name: str):
