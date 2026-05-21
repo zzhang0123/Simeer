@@ -155,13 +155,13 @@ telescope would measure at each pointing -- the beam-weighted integral
 of the sky brightness temperature over the antenna's primary beam:
 
 $$
-T_{\text{sky}}(\nu, t) \;=\; \frac{1}{\Omega_b(\nu)} \int_{S^2} B(\hat{n}, \nu)\, T(\hat{n}, \nu)\, d\Omega
+T_{\text{sky}}(\nu, t) = \frac{1}{\Omega_b(\nu)} \int_{S^2} B(\hat{n}, \nu) T(\hat{n}, \nu) d\Omega
 $$
 
 where:
 
 - $B(\hat{n}, \nu)$ is the primary beam *power* pattern at frequency $\nu$ — a function on the **2-sphere** $S^2$ in directions $\hat{n}$ relative to the pointing. Storage-wise it is parameterised by direction cosines $(l, m)$ for convenience, but the integrand is a density with respect to **sphere measure $d\Omega$**.
-- $\Omega_b(\nu) = \int_{S^2} B \, d\Omega$ is the beam solid angle, with units of steradians, so the ratio is dimensionless and the result is in the same temperature units as the input sky.
+- $\Omega_b(\nu) = \int_{S^2} B \mathop{}\!d\Omega$ is the beam solid angle, with units of steradians, so the ratio is dimensionless and the result is in the same temperature units as the input sky.
 - $T(\hat{n}, \nu)$ is the sky brightness temperature in Kelvin, evaluated at the disc pixels (Simeer projects HEALPix sky pixels into the antenna-local frame on the fly).
 
 The Sky TOD is the "pure" signal that downstream calibration and
@@ -175,7 +175,7 @@ The **Full TOD** is the realistic instrument-modulated signal, the
 quantity an actual receiver writes to disk:
 
 $$
-\text{TOD}(\nu, t) \;=\; G_{\rm bg}(\nu, t)\, \bigl[\,1 + G_{\rm noise}(\nu, t)\,\bigr]\, \bigl[\,T_{\rm sky}(\nu, t) + T_{\rm sys}^{\text{other}}(\nu, t)\,\bigr]\, \bigl[\,1 + \eta(t)\,\bigr]
+\text{TOD}(\nu, t) = G_{\rm bg}(\nu, t) \bigl[1 + G_{\rm noise}(\nu, t)\bigr] \bigl[T_{\rm sky}(\nu, t) + T_{\rm sys}^{\text{other}}(\nu, t)\bigr] \bigl[1 + \eta(t)\bigr]
 $$
 
 with $G_{\rm bg}$ the background gain pattern, $G_{\rm noise}$ the
@@ -192,7 +192,7 @@ of HEALPix pixels around the pointing. The exact production formula
 implemented by `simeer.integrate_sample` is:
 
 $$
-\boxed{\;T_{\text{sky}}(f, t) \;=\; \frac{d\Omega_{\text{pix}}}{\Omega_b(f)} \sum_{i \in \text{disc}} B(l_i, m_i, f)\, T(\text{pix}_i, f)\;}
+\boxed{T_{\text{sky}}(f, t) = \frac{d\Omega_{\text{pix}}}{\Omega_b(f)} \sum_{i \in \text{disc}} B(l_i, m_i, f) T(\text{pix}_i, f)}
 $$
 
 > [!IMPORTANT]
@@ -204,10 +204,10 @@ $$
 > projection — not as a density on the flat $(l, m)$ tangent plane.
 >
 > If the stored beam were instead a density with respect to the
-> Cartesian measure $dl\,dm$ on the tangent plane, the sum would need
+> Cartesian measure $dl \cdot dm$ on the tangent plane, the sum would need
 > to be corrected by the SIN-projection Jacobian
 >
-> $$\frac{d\Omega}{dl\,dm} \;=\; \frac{1}{\sqrt{1 - l^2 - m^2}}$$
+> $$\frac{d\Omega}{dl \cdot dm} = \frac{1}{\sqrt{1 - l^2 - m^2}}$$
 >
 > before contracting against the sphere-measure sum. The MeerKLASS
 > holographic beam is treated as the former (sphere density,
@@ -216,10 +216,10 @@ $$
 > directly.
 >
 > The same logic applies on the normalisation side: $\Omega_b(f)$
-> should *also* be the sphere integral $\int_{S^2} B\, d\Omega$.
+> should *also* be the sphere integral $\int_{S^2} B d\Omega$.
 > Currently the code computes
 >
-> $$\Omega_b(f) \;\approx\; (\Delta l)^2 \sum_{j,k} B(l_j, m_k, f)$$
+> $$\Omega_b(f) \approx (\Delta l)^2 \sum_{j,k} B(l_j, m_k, f)$$
 >
 > in the **flat $(l, m)$ measure** rather than including the Jacobian
 > $1/\sqrt{1 - l^2 - m^2}$ inside the sum. This is a $\sim 0.55\%$
@@ -573,4 +573,3 @@ for the full text.
 Manchester. Part of the MeerKLASS analysis toolchain; see also
 [`limTOD`](https://github.com/zzhang0123/limTOD) and
 [`TIBEC`](https://github.com/zzhang0123/TIBEC).
-
