@@ -44,7 +44,7 @@ path:
     vectorially across the full frequency axis. The beam never has to
     be rotated.
 4.  Multiply by the sky temperature, sum, and normalise by the beam
-    solid angle `Omega_b(freq)`.
+    solid angle $\Omega_b(\nu)$.
 
 The result is a drop-in `SimeerTODSim` class that exposes the same
 interface as `limTOD.TODSim`.
@@ -88,10 +88,10 @@ research scripts will call directly.
 
 ### Dependencies
 
-Required: `numpy`, `scipy`, `healpy`, `astropy`, `joblib`, `tqdm`.
+Required: `numpy`, `healpy`, `joblib`, `tqdm`.
 
-Optional: `limTOD` (for `SimeerTODSim`), `matplotlib` and `jupyter` for
-the notebooks, `pytest` for tests.
+Optional: `limTOD` (for `SimeerTODSim` and the Full-TOD path),
+`matplotlib` and `jupyter` for the notebooks, `pytest` for tests.
 
 ## Quick start
 
@@ -154,22 +154,15 @@ The **Sky TOD** is the noiseless, gain-free sky signal that an ideal
 telescope would measure at each pointing -- the beam-weighted integral
 of the sky brightness temperature over the antenna's primary beam:
 
-```
-                 1
-  T_sky(nu, t) = ----- * integral over sky of  B(l, m, nu) * T(l, m, nu) dOmega
-                Omega_b(nu)
-```
+$$
+T_{\text{sky}}(\nu, t) \;=\; \frac{1}{\Omega_b(\nu)} \int_{S^2} B(\hat{n}, \nu)\, T(\hat{n}, \nu)\, d\Omega
+$$
 
 where:
 
-- `B(l, m, nu)` is the primary beam *power* pattern at frequency `nu`,
-  defined in direction-cosine coordinates `(l, m)` centred on the
-  pointing;
-- `Omega_b(nu) = integral B dOmega` is the beam solid angle, so the
-  result is in the same temperature units as the input sky;
-- `T(l, m, nu)` is the sky brightness temperature evaluated at the disc
-  pixels (Simeer projects HEALPix sky pixels into the antenna-local
-  `(l, m)` frame on the fly).
+- $B(\hat{n}, \nu)$ is the primary beam *power* pattern at frequency $\nu$ — a function on the **2-sphere** $S^2$ in directions $\hat{n}$ relative to the pointing. Storage-wise it is parameterised by direction cosines $(l, m)$ for convenience, but the integrand is a density with respect to **sphere measure $d\Omega$**.
+- $\Omega_b(\nu) = \int_{S^2} B \, d\Omega$ is the beam solid angle, with units of steradians, so the ratio is dimensionless and the result is in the same temperature units as the input sky.
+- $T(\hat{n}, \nu)$ is the sky brightness temperature in Kelvin, evaluated at the disc pixels (Simeer projects HEALPix sky pixels into the antenna-local frame on the fly).
 
 The Sky TOD is the "pure" signal that downstream calibration and
 map-making algorithms ultimately try to recover from the measured TOD.
@@ -181,17 +174,149 @@ injection live in `limTOD`.
 The **Full TOD** is the realistic instrument-modulated signal, the
 quantity an actual receiver writes to disk:
 
-```
-  TOD(nu, t) = G_bg(nu, t) * [1 + G_noise(nu, t)]
-               * [T_sky(nu, t) + T_sys_other(nu, t)]
-               * [1 + eta(t)]
+$$
+\text{TOD}(\nu, t) \;=\; G_{\rm bg}(\nu, t)\, \bigl[\,1 + G_{\rm noise}(\nu, t)\,\bigr]\, \bigl[\,T_{\rm sky}(\nu, t) + T_{\rm sys}^{\text{other}}(\nu, t)\,\bigr]\, \bigl[\,1 + \eta(t)\,\bigr]
+$$
+
+with $G_{\rm bg}$ the background gain pattern, $G_{\rm noise}$ the
+multiplicative $1/f$ gain fluctuation, $T_{\rm sys}^{\text{other}}$
+other system-temperature components (CMB, ground spill, receiver),
+and $\eta$ additive white noise. The Full TOD assembly happens inside
+`limTOD.TODSim.generate_TOD`; Simeer plugs into it by replacing only
+the $T_{\rm sky}(\nu, t)$ step.
+
+### How the Sky TOD is computed (production formula)
+
+Each Sky TOD sample is a weighted sum of sky temperatures over a disc
+of HEALPix pixels around the pointing. The exact production formula
+implemented by `simeer.integrate_sample` is:
+
+$$
+\boxed{\;T_{\text{sky}}(f, t) \;=\; \frac{d\Omega_{\text{pix}}}{\Omega_b(f)} \sum_{i \in \text{disc}} B(l_i, m_i, f)\, T(\text{pix}_i, f)\;}
+$$
+
+> [!IMPORTANT]
+> **Measure convention.** The discrete sum on the sky side is taken
+> with the **HEALPix sphere-pixel solid angle** $d\Omega_{\text{pix}} = 4\pi / N_{\text{pix}}$,
+> i.e., the natural measure of the 2-sphere $S^2$. This implicitly
+> treats $B(l_i, m_i, f)$ as a **density on $S^2$** that is merely
+> *parameterised* by the direction cosines $(l, m)$ via the SIN
+> projection — not as a density on the flat $(l, m)$ tangent plane.
+>
+> If the stored beam were instead a density with respect to the
+> Cartesian measure $dl\,dm$ on the tangent plane, the sum would need
+> to be corrected by the SIN-projection Jacobian
+>
+> $$\frac{d\Omega}{dl\,dm} \;=\; \frac{1}{\sqrt{1 - l^2 - m^2}}$$
+>
+> before contracting against the sphere-measure sum. The MeerKLASS
+> holographic beam is treated as the former (sphere density,
+> direction-cosine parameterisation), so **no Jacobian factor is
+> applied at the disc pixels** — `B(l_i, m_i, f)` enters the sum
+> directly.
+>
+> The same logic applies on the normalisation side: $\Omega_b(f)$
+> should *also* be the sphere integral $\int_{S^2} B\, d\Omega$.
+> Currently the code computes
+>
+> $$\Omega_b(f) \;\approx\; (\Delta l)^2 \sum_{j,k} B(l_j, m_k, f)$$
+>
+> in the **flat $(l, m)$ measure** rather than including the Jacobian
+> $1/\sqrt{1 - l^2 - m^2}$ inside the sum. This is a $\sim 0.55\%$
+> bias at the $\pm 6^{\circ}$ beam edge (much smaller in practice
+> because the beam mass is concentrated near $l = m = 0$ where the
+> Jacobian is $\approx 1$). Behaviour inherited from `primary_beam.py`,
+> tracked as follow-up #7.
+
+#### Symbol $\to$ code correspondence
+
+| Symbol | Meaning | Where it comes from |
+| --- | --- | --- |
+| $(\alpha_p, e_p)$ | pointing direction in degrees: azimuth and elevation | caller (`az_pointing_deg`, `el_pointing_deg`) |
+| $(\text{ra}_p, \text{dec}_p)$ | equatorial direction of the pointing | `simeer.projection.horizon_to_equatorial(az_p, el_p, lst_deg, lat_deg)` |
+| disc pixel set | HEALPix pixels within `disc_radius_deg` of $(\text{ra}_p, \text{dec}_p)$, minus pixels below the horizon ($e_i \leq 0$) and any pixels excluded by `horizontal_mask` | `simeer.disc.select_disc(...)` + keep mask in `integrate_sample` |
+| $(\alpha_i, e_i)$ | horizontal direction (az, el) of each disc pixel at this LST | `simeer.projection.pixel_directions_to_az_el(nside_sky, pix_ids, lst, lat)` |
+| $(l_i, m_i)$ | direction cosines of disc pixel $i$ in beam-local SIN projection: $l = \cos(e_i) \sin(\Delta\alpha)$, $m = \sin(e_i)\cos(e_p) - \cos(e_i)\sin(e_p)\cos(\Delta\alpha)$, $\Delta\alpha = \alpha_i - \alpha_p$ | `simeer.projection.direction_cosines(...)` (converted to degrees for the grid lookup) |
+| $B(l_i, m_i, f)$ | beam **power** $\lvert\text{Jones}\rvert^2$ on $S^2$, bilinearly interpolated from the $(n_{\rm freq}, n_m, n_l)$ cube; treated as a density w.r.t. $d\Omega$ | `simeer.interpolation.precompute_bilinear_weights(...)` + `apply_bilinear(...)` on `beam.power_cube(pol)` |
+| $T(\text{pix}_i, f)$ | sky brightness temperature [K] at disc HEALPix pixel $i$ (equatorial frame, same nside as the sum) | `sky_maps[sky_freq_indices, pix_ids]` |
+| $d\Omega_{\text{pix}}$ | HEALPix pixel solid angle on $S^2$, constant by HEALPix's equal-area construction | $4\pi / N_{\text{pix}}$, computed inline |
+| $\Omega_b(f)$ | beam solid angle (in steradians) | `beam.beam_solid_angle(pol)` $= (\Delta l_{\rm rad})^2 \sum_{j,k} B(l_j, m_k, f)$ — **flat-measure approximation**, see callout |
+| product + weighted sum | the integration step itself | `simeer.stokes.integrate_stokes_I(beam_disc, sky_disc, omega_b, d_omega_pix)` |
+
+#### What is and isn't applied
+
+- ✅ **Beam normalisation by $\Omega_b$.** Result is in the same
+  temperature units as `sky_maps`. For a uniform sky $T_0$ the formula
+  returns $T_0$ modulo discretisation, provided the disc encloses the
+  beam support.
+- ⚠️ **SIN-projection Jacobian on $\Omega_b$** is omitted — flat-measure
+  $(\Delta l)^2 \sum B$ rather than $(\Delta l)^2 \sum B / \sqrt{1 - l^2 - m^2}$. See the **Measure convention** callout above; tracked as follow-up #7.
+- ✅ **HEALPix pixel-area Jacobian** not needed — HEALPix pixels all
+  have the same solid angle, so the scalar $d\Omega_{\text{pix}}$ is
+  exact.
+- ✅ **Below-horizon and masked pixels** are dropped *before* the sum,
+  so they contribute zero rather than being multiplied by a small but
+  nonzero beam value.
+- ❌ **Sky-frequency interpolation** not done — `sky_maps` must be
+  aligned to the beam's output channels (follow-up #14).
+- ❌ **Polarisation field rotation** not done — only Stokes I;
+  `polarization='HH'` or `'VV'` selects the diagonal Jones-product
+  cube. Sky Q/U would need a $2\chi$ rotation between sky and beam
+  frames (follow-up #1); cross-pol $HV$/$VH$ leakage is not applied
+  (follow-up #2).
+- 🔁 **Beam rotation** never happens — only sky pixels are projected
+  into the beam frame via the direction-cosine formula above. This is
+  the key design difference from limTOD's spherical-harmonic rotation
+  path.
+
+#### Pseudocode of the actual call chain
+
+```python
+def integrate_sample(*, beam, sky_maps, lst_deg, az_pointing_deg, el_pointing_deg,
+                    lat_deg, beam_freq_indices, sky_freq_indices, disc_radius_deg,
+                    polarization, horizontal_mask):
+
+    nside_sky = hp.npix2nside(sky_maps.shape[-1])
+
+    # 1. Pointing -> equatorial.
+    ra_p, dec_p = projection.horizon_to_equatorial(
+        az_pointing_deg, el_pointing_deg, lst_deg, lat_deg)
+
+    # 2. Disc query in equatorial coords.
+    pix_ids = disc.select_disc(nside_sky, ra_p, dec_p, disc_radius_deg)
+
+    # 3. Disc pixels back to horizontal at this LST; drop below-horizon and masked.
+    az_s, el_s = projection.pixel_directions_to_az_el(
+        nside_sky, pix_ids, lst_deg, lat_deg)
+    keep = (el_s > 0)
+    if horizontal_mask is not None:
+        keep &= horizontal_mask[pix_ids]
+    pix_ids, az_s, el_s = pix_ids[keep], az_s[keep], el_s[keep]
+
+    # 4. Direction cosines in beam frame.
+    l, m = projection.direction_cosines(
+        az_pointing_deg, el_pointing_deg, az_s, el_s)
+
+    # 5. Bilinear weights against (m, l) grid -- once per pointing, all freqs.
+    weights = interpolation.precompute_bilinear_weights(
+        np.rad2deg(l), np.rad2deg(m), beam.margin_deg, beam.margin_deg)
+
+    # 6. Gather B at the disc points for the requested frequency channels.
+    B_disc = interpolation.apply_bilinear(
+        weights, beam.power_cube(polarization), beam_freq_indices)  # (n_freq, n_disc)
+
+    # 7. Weighted sum, normalised by the beam solid angle.
+    d_omega_pix = 4 * np.pi / hp.nside2npix(nside_sky)
+    omega_b = beam.beam_solid_angle(polarization)[beam_freq_indices]
+    sky_disc = sky_maps[sky_freq_indices[:, None], pix_ids[None, :]]
+    return (d_omega_pix / omega_b) * np.sum(B_disc * sky_disc, axis=-1)
 ```
 
-with `G_bg` the background gain pattern, `G_noise` the multiplicative
-1/f gain fluctuation, `T_sys_other` other system-temperature components
-(CMB, ground spill, receiver), and `eta` additive white noise. The Full
-TOD assembly happens inside `limTOD.TODSim.generate_TOD`; Simeer plugs
-into it by replacing only the `T_sky(nu, t)` step.
+`integrate_tod` is a thin driver that loops the above over `lst_deg_list[i]`,
+`az_deg_list[i]`, `el_deg_list[i]`, batches across joblib workers, and
+hoists the per-batch invariants (the power cube, the omega_b slice, the
+margin grid) so they are passed once as top-level ndarrays (joblib
+auto-memmaps them).
 
 ### Key APIs
 
@@ -315,10 +440,14 @@ pytest -m unit                          # fast unit tests only
 pytest -m slow                          # tests that load the real beam file (skipped by default in CI)
 ```
 
-The integration tests use the synthetic Gaussian beam constructed via
-`synthetic_gaussian_beam(...)` so they run without the real ~30 GB beam
-file. The cross-check against `limTOD`'s HEALPix path lives in
-`tests/test_against_limtod.py` (planned, see follow-ups).
+The default suite uses the synthetic Gaussian beam via
+`synthetic_gaussian_beam(...)` so it runs without the real ~30 GB beam
+file (and without limTOD). The cross-check against limTOD's HEALPix-SH
+path lives in `tests/test_against_limtod.py` (11 tests, gated behind
+`pytest.importorskip("limTOD")` so the rest of the suite stays
+limTOD-free). The cross-check also smoke-tests
+`SimeerTODSim.simulate_sky_TOD` and `.generate_TOD` (the Full-TOD path),
+which need limTOD's noise/gain machinery.
 
 ## Review iteration log
 
@@ -341,6 +470,7 @@ findings landed in code as follows (each item is now closed):
 | 11| MEDIUM   | Tests             | Added VV-polarisation test, empty/zeroed-mask test, beam-solid-angle cache test, FWHM regression test, mask-shape validation test, `Stokes != I` test, optional-`sky_freq_indices` test. 33 tests total (up from 20). |
 | 12| LOW      | Style             | All modules: `from collections.abc import ...`, `X | None`, `tuple[X, Y]`; black + ruff clean. |
 | 13| LOW      | Spelling          | `materialise_sky_cube` is now `materialize_sky_cube`; the British alias is retained for one release. |
+| 14| MEDIUM   | Tests             | Cross-check vs limTOD landed in `tests/test_against_limtod.py` (11 tests, gated by `importorskip`). Median agreement 0.18-1.9% across el/az/FWHM corners. `SimeerTODSim.generate_TOD` (Full-TOD path) is now smoke-tested end-to-end. 44 tests total in TOD env (33 without limTOD). |
 
 ## Follow-ups
 
@@ -359,12 +489,17 @@ welcome.
     Jones entries and propagate them into the antenna-temperature
     formula. Affects the linear polarisation fidelity at the few-percent
     level.
-3.  **Boundary-validation cross-check against limTOD.** Add
-    `tests/test_against_limtod.py` that takes a symmetric Gaussian beam,
-    routes it through both the limTOD SH path and the Simeer disc path
-    at matched `nside`, and asserts agreement on a parameter grid that
-    includes extreme corners (`el in {15, 89}`, az wrap, disc radius
-    vs beam extent ratios).
+3.  ~~**Boundary-validation cross-check against limTOD.**~~ **Done.**
+    See `tests/test_against_limtod.py` (11 tests, gated behind
+    `pytest.importorskip("limTOD")`). Covers uniform sky and a smooth
+    Dec-gradient sky, at boundary corners `el in {15, 45, 89}`, az
+    wrap (0 / 180 / 359), and FWHM in {1.5, 2.5, 4.0} deg. Median
+    relative agreement on the matched-Gaussian configurations: 0.18%
+    at FWHM=4 deg, 0.65% at FWHM=2.5 deg, 1.9% at FWHM=1.5 deg --
+    discrepancy is dominated by limTOD's HEALPix discretisation, not
+    Simeer's bilinear interpolation. Also smoke-tests
+    `SimeerTODSim.simulate_sky_TOD` and `.generate_TOD` (the Full-TOD
+    path), which were previously zero-coverage.
 4.  **Horizontal masking in horizontal coords (not equatorial).**
     Today `horizontal_mask` is indexed by equatorial pixel id (same
     frame as `sky_maps`). Translate to a genuine horizon-frame mask so
@@ -429,7 +564,7 @@ welcome.
 
 ## License
 
-MIT, matching the rest of the MeerKLASS toolchain. See [LICENSE](LICENSE)
+MIT. See [LICENSE](LICENSE)
 for the full text.
 
 ## Author

@@ -118,8 +118,7 @@ class MeerKLASSBeam:
             # NPZ archives store strings as numpy bytes (np.bytes_). Decode
             # to plain str so substring lookup works ergonomically.
             antnames = [
-                a.decode() if isinstance(a, (bytes, np.bytes_)) else str(a)
-                for a in raw_antnames
+                a.decode() if isinstance(a, (bytes, np.bytes_)) else str(a) for a in raw_antnames
             ]
             try:
                 ant_idx = antnames.index(antenna)
